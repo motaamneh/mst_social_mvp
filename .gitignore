@@ -33,3 +33,7 @@ build/
 .vscode/
 
 /forAI
+
+### Local environment and secrets ###
+.env
+.env.*
