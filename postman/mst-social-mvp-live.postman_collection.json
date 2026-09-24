@@ -1,0 +1,120 @@
+{
+  "info": {
+    "name": "MST Social MVP - live Instagram verification",
+    "description": "Tests this application's HTTP API while MST_INSTAGRAM_PROVIDER_MODE=searchapi. Run requests 1-3, copy the marker returned by request 2 into the Instagram biography for username, wait until it is visible, then run requests 4-5. Use an Instagram account you control. Each verification check can consume a SearchAPI request. A challenge expires after 15 minutes. Use a fresh username for a new successful verification under the same tenant; the app does not allow the same Instagram handle to be linked twice.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{apiKey}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "apiKey", "value": "", "type": "secret" },
+    { "key": "username", "value": "your_instagram_username" },
+    { "key": "subjectId", "value": "postman-live-user" },
+    { "key": "verificationId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Health check",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "url": "{{baseUrl}}/actuator/health"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('App is healthy', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('UP'); });"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "2. Create verification challenge",
+      "request": {
+        "description": "Set username to a public Instagram account you control. Copy the marker from the response into that account's biography. Do not put the SearchAPI key into this request; the server uses it internally.",
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subjectId\": \"{{subjectId}}\",\n  \"username\": \"{{username}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/verifications"
+      },
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "if (!pm.variables.get('apiKey')) { throw new Error('Set the Postman apiKey variable to the same MST_LOCAL_API_KEY configured in IntelliJ.'); }"
+          ]
+        }
+      }, {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('API key accepted (401: check Authorization Bearer token and IntelliJ MST_LOCAL_API_KEY)', function () { pm.expect(pm.response.code).to.not.equal(401); });",
+            "pm.test('Challenge created with a marker', function () { pm.response.to.have.status(201); const body = pm.response.json(); pm.expect(body.status).to.eql('PENDING'); pm.expect(body.provider).to.eql('instagram'); pm.expect(body.verificationId).to.be.a('string'); pm.expect(body.marker).to.match(/^mst_[A-Z2-7]{26}$/); pm.expect(body.expiresAt).to.be.a('string'); });",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('verificationId', pm.response.json().verificationId); }"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "3. Read pending status",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Status is pending and marker is hidden', function () { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.verificationId).to.eql(pm.collectionVariables.get('verificationId')); pm.expect(body.status).to.eql('PENDING'); pm.expect(body).not.to.have.property('marker'); });"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "4. Verify Instagram bio marker",
+      "request": {
+        "description": "Run only after the marker from request 2 is visible in the real Instagram biography. The server reads the biography through SearchAPI. This request can consume a SearchAPI credit. A 503 with result PROVIDER_UNAVAILABLE means the provider could not supply usable evidence; a 200 with MARKER_NOT_FOUND means the returned biography did not include this challenge's marker. Unsuccessful observations can use one of the five allowed attempts.",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}/verify"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Instagram account verified', function () { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.verificationId).to.eql(pm.collectionVariables.get('verificationId')); pm.expect(body.status).to.eql('VERIFIED'); pm.expect(body.result).to.eql('VERIFIED'); pm.expect(body.attemptCount).to.be.a('number'); });"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "5. Read verified status",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Status is verified and marker is hidden', function () { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.verificationId).to.eql(pm.collectionVariables.get('verificationId')); pm.expect(body.status).to.eql('VERIFIED'); pm.expect(body).not.to.have.property('marker'); });"
+          ]
+        }
+      }]
+    }
+  ]
+}

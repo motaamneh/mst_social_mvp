@@ -41,11 +41,18 @@ management:
 
 springdoc:
   swagger-ui:
-    enabled: false
+    enabled: true
   api-docs:
-    enabled: false
+    enabled: tue
 
 mst:
+  instagram-provider:
+    mode: ${MST_INSTAGRAM_PROVIDER_MODE:searchapi}
+    base-url: ${MST_INSTAGRAM_PROVIDER_BASE_URL:}
+    allowed-host: ${MST_INSTAGRAM_PROVIDER_ALLOWED_HOST:}
+    token: ${MST_INSTAGRAM_PROVIDER_TOKEN:}
+  searchapi:
+    api-key: ${MST_SEARCHAPI_API_KEY:}
   verification:
     challenge-ttl: PT15M
     maximum-attempts: 5

@@ -1,0 +1,93 @@
+{
+  "info": {
+    "name": "MST Social MVP - local verification flow",
+    "description": "Run in order with the local Spring profile. Set apiKey to the same MST_LOCAL_API_KEY used when starting the app. The local profile fixture simulates an Instagram biography; it does not call Instagram.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "apiKey", "value": "" },
+    { "key": "username", "value": "mothe.techguy" },
+    { "key": "subjectId", "value": "postman-test-user" },
+    { "key": "verificationId", "value": "" },
+    { "key": "marker", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Health check",
+      "request": { "method": "GET", "auth": { "type": "noauth" }, "url": "{{baseUrl}}/actuator/health" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('App is healthy', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('UP'); });"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "2. Create challenge",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"subjectId\":\"{{subjectId}}\",\"username\":\"{{username}}\"}" },
+        "url": "{{baseUrl}}/api/v1/verifications"
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Challenge created', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().status).to.eql('PENDING'); });",
+        "if (pm.response.code === 201) { const body = pm.response.json(); pm.collectionVariables.set('verificationId', body.verificationId); pm.collectionVariables.set('marker', body.marker); }"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "3. Set local fake bio without marker",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"biography\":\"Postman test bio without the marker\"}" },
+        "url": "{{baseUrl}}/api/v1/local/instagram-profiles/{{username}}"
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Local fixture saved', () => pm.response.to.have.status(204));"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "4. Verify missing marker",
+      "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}/verify" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Mismatch stays pending', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.result).to.eql('MARKER_NOT_FOUND'); pm.expect(body.status).to.eql('PENDING'); pm.expect(body.attemptCount).to.eql(1); });"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "5. Set local fake bio with marker",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"biography\":\"Postman test bio {{marker}}\"}" },
+        "url": "{{baseUrl}}/api/v1/local/instagram-profiles/{{username}}"
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Local fixture saved', () => pm.response.to.have.status(204));"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "6. Verify matching marker",
+      "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}/verify" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Identity verified', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.result).to.eql('VERIFIED'); pm.expect(body.status).to.eql('VERIFIED'); pm.expect(body.attemptCount).to.eql(2); });"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "7. Read final status",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Verified and marker not returned', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.status).to.eql('VERIFIED'); pm.expect(body).not.to.have.property('marker'); });"
+      ], "type": "text/javascript" } }]
+    },
+    {
+      "name": "8. Reusing a verified challenge fails",
+      "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/verifications/{{verificationId}}/verify" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Already verified', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().code).to.eql('CHALLENGE_ALREADY_VERIFIED'); });"
+      ], "type": "text/javascript" } }]
+    }
+  ]
+}
