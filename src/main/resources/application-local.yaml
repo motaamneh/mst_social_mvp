@@ -20,5 +20,7 @@ management:
       show-details: when-authorized
 
 mst:
+  instagram-provider:
+    mode: ${MST_INSTAGRAM_PROVIDER_MODE:fake}
   security:
     marker-hmac-key: ${MST_MARKER_HMAC_KEY:local-development-key-that-must-never-be-used-in-production}
